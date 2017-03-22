@@ -26,7 +26,8 @@
 }
 
 @property (strong, nonatomic) UIImageView *imageView;
-@property (nonatomic, strong) MPMoviePlayerController *videoPlayer;
+@property (nonatomic, strong) AVPlayer *videoPlayer;
+@property (nonatomic, strong) AVPlayerViewController * playerViewController;
 @property (nonatomic) CGFloat videoPlayerScale;
 @property (strong, nonatomic) UIImageView * videoStartMaskView;
 
@@ -56,7 +57,7 @@
 
 -(void)dealloc
 {
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:MPMoviePlayerPlaybackDidFinishNotification object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:AVPlayerItemDidPlayToEndTimeNotification object:nil];
 
 }
 
@@ -83,7 +84,6 @@
     self.imageView.frame = frameToCenter;
 
     self.videoStartMaskView.hidden = YES;
-
 
 
 }
@@ -136,7 +136,8 @@
             [manager requestAVAssetForVideo:self.phAsset options:requestOptions resultHandler:^(AVAsset *avAsset, AVAudioMix *audioMix, NSDictionary *info) {
                 UIInterfaceOrientation orientation = [IGCropView orientationForTrack:avAsset];
 
-                CGRect visibleRect = [self convertRect:self.bounds toView:self.videoPlayer.view];
+                
+                CGRect visibleRect = [self convertRect:self.bounds toView:self.playerViewController.view];
 
                 CGAffineTransform t = CGAffineTransformMakeScale( 1 / self.videoPlayerScale, 1 / self.videoPlayerScale);
 
@@ -401,15 +402,15 @@ static CGRect IGScaleRect(CGRect rect, CGFloat scale)
     self.imageView = nil;
     if(self.videoPlayer)
     {
-        [self.videoPlayer stop];
-        [self.videoPlayer.view removeFromSuperview];
+        [self.videoPlayer pause];
+        [self.playerViewController.view removeFromSuperview];
     }
 
 
     //hide start mask and add observer
     self.videoStartMaskView.hidden = YES;
 
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:MPMoviePlayerPlaybackDidFinishNotification object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:AVPlayerItemDidPlayToEndTimeNotification object:nil];
 
     PHImageManager *manager = [PHImageManager defaultManager];
 
@@ -457,36 +458,49 @@ static CGRect IGScaleRect(CGRect rect, CGFloat scale)
         requestOptions.networkAccessAllowed = true;
 
         [manager requestAVAssetForVideo:asset options:requestOptions resultHandler:^(AVAsset *avAsset, AVAudioMix *audioMix, NSDictionary *info) {
-            AVURLAsset *urlAsset = (AVURLAsset *)avAsset;
-
-            self.videoPlayer = [[MPMoviePlayerController alloc] initWithContentURL: urlAsset.URL];
-            self.videoPlayer.controlStyle = MPMovieControlStyleNone;
-            self.videoPlayer.movieSourceType = MPMovieSourceTypeFile;
-            self.videoPlayer.scalingMode = MPMovieScalingModeAspectFill;
-
-            [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(playerDidFinishedCallBack:) name:MPMoviePlayerPlaybackDidFinishNotification object:nil];
-
-            CGSize size;
-            if (asset.pixelHeight > asset.pixelWidth) {
-                size.width = self.bounds.size.width;
-                size.height = (self.bounds.size.width / asset.pixelWidth) * asset.pixelHeight;
-                self.videoPlayerScale =  self.bounds.size.width / asset.pixelWidth;
-
-            } else {
-                size.height = self.bounds.size.height;
-                size.width = (self.bounds.size.height / asset.pixelHeight) * asset.pixelWidth;
-                self.videoPlayerScale =  self.bounds.size.height / asset.pixelHeight;
-
-            }
-
-            self.videoPlayer.view.frame = CGRectMake(0, 0, size.width, size.height);
-
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self addSubview:self.videoPlayer.view];
-                [self.videoPlayer play];
-                [self configureForImageSize:self.videoPlayer.view.frame.size];
-
-                _playState = 1;
+                if([avAsset isKindOfClass: [AVURLAsset class]]){
+                    AVURLAsset *urlAsset = (AVURLAsset *)avAsset;
+                    
+                    //                self.videoPlayer = [[MPMoviePlayerController alloc] initWithContentURL: urlAsset.URL];
+                    //                self.videoPlayer.controlStyle = MPMovieControlStyleNone;
+                    //                self.videoPlayer.movieSourceType = MPMovieSourceTypeFile;
+                    //                self.videoPlayer.scalingMode = MPMovieScalingModeAspectFill;
+                    self.videoPlayer = [AVPlayer playerWithURL:urlAsset.URL];
+                    
+                    self.videoPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+                    
+                    self.playerViewController = [AVPlayerViewController new];
+                    self.playerViewController.player = self.videoPlayer;
+                    self.playerViewController.showsPlaybackControls = NO;
+                
+                    [[NSNotificationCenter defaultCenter] addObserver:self
+                                                             selector:@selector(playerDidFinishedCallBack:)
+                                                                 name:AVPlayerItemDidPlayToEndTimeNotification
+                                                               object:[self.videoPlayer currentItem]];
+                    
+                    CGSize size;
+                    if (asset.pixelHeight > asset.pixelWidth) {
+                        size.width = self.bounds.size.width;
+                        size.height = (self.bounds.size.width / asset.pixelWidth) * asset.pixelHeight;
+                        self.videoPlayerScale =  self.bounds.size.width / asset.pixelWidth;
+                        
+                    } else {
+                        size.height = self.bounds.size.height;
+                        size.width = (self.bounds.size.height / asset.pixelHeight) * asset.pixelWidth;
+                        self.videoPlayerScale =  self.bounds.size.height / asset.pixelHeight;
+                        
+                    }
+                    
+                    
+                    
+                    self.playerViewController.view.frame = CGRectMake(0, 0, size.width, size.height);
+                    
+                    [self addSubview:self.playerViewController.view];
+                    
+                    [self.videoPlayer play];
+                    _playState = 1;
+                }
             });
 
         }];
@@ -523,6 +537,7 @@ static CGRect IGScaleRect(CGRect rect, CGFloat scale)
     {
         _playState = 1;
         [self.videoPlayer play];
+        
         self.videoStartMaskView.hidden = YES;
 
 
@@ -538,7 +553,7 @@ static CGRect IGScaleRect(CGRect rect, CGFloat scale)
 {
     if((self.videoPlayer) && (_playState == 1)) {
         _playState = 2;
-        [self.videoPlayer stop];
+        [self.videoPlayer pause];
         self.videoStartMaskView.hidden = NO;
     }
 }
@@ -553,7 +568,9 @@ static CGRect IGScaleRect(CGRect rect, CGFloat scale)
 {
     _playState = 2;
     self.videoStartMaskView.hidden = NO;
-
+    AVPlayerItem *p = [notification object];
+    [p seekToTime:kCMTimeZero];
+    [self.videoPlayer pause];
 }
 
 
