@@ -64,6 +64,8 @@
 
     if ([mediaType isEqualToString:@"photo"]) {
         fetchOptions.predicate = [NSPredicate predicateWithFormat:@"mediaType == %i", PHAssetMediaTypeImage];
+    }else if ([mediaType isEqualToString:@"live_photo"]) {
+        fetchOptions.predicate = [NSPredicate predicateWithFormat: @"(mediaSubtype == %ld)", PHAssetMediaSubtypePhotoLive];
     } else if ([mediaType isEqualToString:@"video"]) {
         fetchOptions.predicate = [NSPredicate predicateWithFormat:@"mediaType == %i", PHAssetMediaTypeVideo];
     } else {
