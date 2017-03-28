@@ -497,7 +497,7 @@ static CGRect IGScaleRect(CGRect rect, CGFloat scale)
                     self.playerViewController.view.frame = CGRectMake(0, 0, size.width, size.height);
                     
                     [self addSubview:self.playerViewController.view];
-                    
+                    [self configureForImageSize:self.playerViewController.view.bounds.size];
                     [self.videoPlayer play];
                     _playState = 1;
                 }
